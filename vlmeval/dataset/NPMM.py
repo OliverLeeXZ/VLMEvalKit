@@ -12,10 +12,13 @@ from vlmeval.dataset.utils.NPMM.minimum_cut import validation as minimum_cut_val
 from vlmeval.dataset.utils.NPMM.gcp import validation as gcp_validation
 from vlmeval.dataset.utils.NPMM.mcp import validation as mcp_validation
 
-class MMHELIX(ImageBaseDataset):
+class NPMM(ImageBaseDataset):
     TYPE = 'VQA'
     DATASET_URL = {
-        'NPMM': '',
+        'npmm': '',
+    }
+    DATASET_MD5 = {
+        'npmm': '00441dd57ffae1d4c16115601fbba4c6',
     }
     GROUP_LIST = {
         "selection": ["set-cover", "subset-sum", "knapsack"],
