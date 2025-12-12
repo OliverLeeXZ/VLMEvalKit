@@ -1,5 +1,5 @@
 from typing import Any
-
+import ast
 
 from vlmeval.smp import *
 from vlmeval.dataset.image_base import ImageBaseDataset
@@ -18,7 +18,7 @@ class NPMM(ImageBaseDataset):
         'npmm': '',
     }
     DATASET_MD5 = {
-        'npmm': '00441dd57ffae1d4c16115601fbba4c6',
+        'npmm': 'ac0e6494c87c84ac27c623c527abc0f2',
     }
     GROUP_LIST = {
         "selection": ["set-cover", "subset-sum", "knapsack"],
@@ -27,20 +27,28 @@ class NPMM(ImageBaseDataset):
         "partition": ["NpMinimumCut"],
         "schedule": ["meeting-schedule"]
     }
-    
+
     def evaluate(self, eval_file, **judge_kwargs):
         data = load(eval_file)
         stats = defaultdict[Any, dict[str, int | float]](lambda: {'total': 0, 'valid': 0, 'ar_accum': 0.0})
         target_tasks = ["NpTsp", "NpHamiltonianCycle", "NpMaximumCliqueProblem", 
                         "NpMinimumCut", "NpMaximumSet", "NpGcpD"]
         for index, data_item in data.iterrows():
-            task = data_item.get("task").split("-")[1]
+            task = data_item.get("data_source").split("/")[1]
             if task not in target_tasks:
                 continue
-            prediction = data_item.get('prediction', None)
-            reward_model = data_item.get('reward_model', None)   
-            ground_truth = reward_model['ground_truth']['ground_truth']
-            graph = data_item.get('question')
+            prediction = data_item.get('prediction')
+            ground_truth = data_item.get('ground_truth')
+            graph = data_item.get('graph')
+
+            # Parse graph from string to dict if needed
+            # graph should be string of a dict
+            if isinstance(graph, str):
+                try:
+                    graph = ast.literal_eval(graph)
+                except (ValueError, SyntaxError) as e:
+                    raise ValueError(f"Failed to parse graph for task {task}, index {index}: {e}")
+
             stats[task]['total'] += 1
             is_invalid = True
             value = 0
@@ -78,19 +86,19 @@ class NPMM(ImageBaseDataset):
             else:
                 sr = 0.0
                 ar = 0.0
-            
+
             subtask_results[task] = {'SR': sr, 'AR': ar, 'count': total}
         subtask_file = get_intermediate_file_path(eval_file, '_subtask_stats', 'json')
         dump(subtask_results, subtask_file)
         group_stats = []
-        
+
         total_sr = 0
         total_ar = 0
         valid_tasks_count = 0
-        
+
         for group, tasks in self.GROUP_LIST.items():
             relevant_tasks = [t for t in tasks if t in subtask_results and subtask_results[t]['count'] > 0]
-            
+
             if not relevant_tasks:
                 continue
             avg_sr = sum(subtask_results[t]['SR'] for t in relevant_tasks) / len(relevant_tasks)
@@ -114,10 +122,8 @@ class NPMM(ImageBaseDataset):
                 'AR': total_ar / valid_tasks_count,
                 'num_subtasks': valid_tasks_count
             })
-
+        print(group_stats)
         accuracy_df = pd.DataFrame(group_stats)
-        
         score_file = get_intermediate_file_path(eval_file, '_acc', 'csv')
         dump(accuracy_df, score_file)
-        
         return accuracy_df
